@@ -740,9 +740,9 @@
     const DEFAULT_COLUMNS = {
       development: ["Development", "Development Name", "Project", "Lot-Block-Plan", "Lot Block Plan"],
       address: ["Address", "Site Address", "Civic Address"],
-      status: ["Status"],
+      status: ["Status", "Lot Sale Status", "Closing Date", "Lot Status"],
       manager: ["Manager", "Project Manager"],
-      budget: ["Budget", "Purchase"],
+      budget: ["Budget", "Purchase", "Lot Purchase"],
       lastUpdated: ["Last Updated", "Updated At"],
       notes: ["Notes", "Description"],
       lots: ["Lots", "Total Lots", "Lot Count", "Available Lots"],
@@ -857,6 +857,31 @@
       return -1;
     }
 
+    function parseCSVLine(line) {
+      const out = [];
+      let i = 0;
+      while (i < line.length) {
+        if (line[i] === '"') {
+          let cell = "";
+          i++;
+          while (i < line.length) {
+            if (line[i] === '"') {
+              i++;
+              if (line[i] === '"') { cell += '"'; i++; }
+              else break;
+            } else { cell += line[i]; i++; }
+          }
+          out.push(cell.trim());
+        } else {
+          let cell = "";
+          while (i < line.length && line[i] !== ",") { cell += line[i]; i++; }
+          out.push(cell.trim());
+          if (line[i] === ",") i++;
+        }
+      }
+      return out;
+    }
+
     async function fetchPublishedCsvTable(sheetId, gid) {
       // sheetId is expected to look like "e/<PUBLIC_ID>" from parseSheetRef
       const url = `https://docs.google.com/spreadsheets/d/${sheetId}/pub?gid=${gid}&single=true&output=csv`;
@@ -872,16 +897,13 @@
       if (!lines.length) {
         return { cols: [], rows: [] };
       }
-      const cellsFromLine = (line) => {
-        // Very simple CSV split; good enough for this sheet (no embedded commas in values)
-        return line.split(",").map((cell) => cell.replace(/^"|"$/g, ""));
-      };
-      const headerCells = cellsFromLine(lines[0]);
-      const cols = headerCells.map((label, idx) => ({ id: String(idx), label }));
-      const rows = lines.slice(1).map((line) => ({
-        c: cellsFromLine(line).map((v) => ({ v })),
-      }));
-      return { cols, rows };
+      const allRows = lines.map((line) => {
+        const cells = parseCSVLine(line);
+        return { c: cells.map((v) => ({ v: v || "" })) };
+      });
+      const maxCols = Math.max(0, ...allRows.map((r) => r.c.length));
+      const cols = Array.from({ length: maxCols }, (_, idx) => ({ id: String(idx), label: "" }));
+      return { cols, rows: allRows };
     }
 
     async function fetchSheetRows(sheetId, gid) {
